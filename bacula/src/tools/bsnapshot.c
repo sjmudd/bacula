@@ -22,7 +22,12 @@
 
 #ifdef HAVE_SUN_OS
 #include <sys/types.h>
-#include <sys/mkdev.h>          /* Define major() and minor() */
+#endif
+
+#ifdef MAJOR_IN_MKDEV
+#include <sys/mkdev.h>
+#elif defined MAJOR_IN_SYSMACROS
+#include <sys/sysmacros.h>
 #endif
 
 #define Dmsg(level,  ...) do { \
