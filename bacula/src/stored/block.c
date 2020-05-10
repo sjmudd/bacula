@@ -614,9 +614,9 @@ reread:
 
       if (block->read_len < BLKHDR2_LENGTH) {
          dev->dev_errno = EIO;
-         Mmsg3(dev->errmsg, _("[SE0205] Volume data error at %s! Very short block of %d bytes on device %s discarded.\n"),
+         Mmsg3(dev->errmsg, _("[SE0205] Volume data error at %s! Short block of %d bytes on device %s discarded.\n"),
             dev->print_addr(ed1, sizeof(ed1)), block->read_len, dev->print_name());
-         Jmsg(jcr, M_ERROR, 0, "%s", dev->errmsg);
+         Jmsg(jcr, M_WARNING, 0, "%s", dev->errmsg);  /* discard block, but continue */
          dev->set_short_block();
          block->read_len = block->binbuf = 0;
          Dmsg2(50, "set block=%p binbuf=%d\n", block, block->binbuf);
@@ -680,7 +680,7 @@ reread:
       dev->dev_errno = EIO;
       Mmsg4(dev->errmsg, _("[SE0208] Volume data error at %u:%u! Short block of %d bytes on device %s discarded.\n"),
          dev->file, dev->block_num, block->read_len, dev->print_name());
-      Jmsg(jcr, M_ERROR, 0, "%s", dev->errmsg);
+      Jmsg(jcr, M_WARNING, 0, "%s", dev->errmsg);  /* discard block, but continue */
       dev->set_short_block();
       block->read_len = block->binbuf = 0;
       return false;             /* return error */
