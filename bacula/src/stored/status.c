@@ -1065,7 +1065,7 @@ bool qstatus_cmd(JCR *jcr)
          unbash_spaces(collname);
 
       } else if (!strcmp(argk[i], "api_opts") && argv[i]) {
-         strncpy(sp.api_opts, argv[i], sizeof(sp.api_opts));
+         bstrncpy(sp.api_opts, argv[i], sizeof(sp.api_opts));
       }
    }
 

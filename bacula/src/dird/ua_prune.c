@@ -808,7 +808,7 @@ static bool prune_expired_volumes(UAContext *ua)
 
    foreach_alist(val, lst) {
       nb++;
-      memset(&mr, 0, sizeof(mr));
+      memset((void *)&mr, 0, sizeof(mr));
       bstrncpy(mr.VolumeName, val, sizeof(mr.VolumeName));
       db_get_media_record(ua->jcr, ua->db, &mr);
       Mmsg(query, _("Volume \"%s\""), val);

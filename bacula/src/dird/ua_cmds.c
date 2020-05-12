@@ -1994,8 +1994,8 @@ static int cloud_list_cmd(UAContext *ua, const char *cmd)
    bool first=true;
    uint32_t maxpart=0, part;
    uint64_t maxpart_size=0;
-   memset(&pr, 0, sizeof(pr));
-   memset(&mr, 0, sizeof(mr));
+   memset((void *)&pr, 0, sizeof(pr));
+   memset((void *)&mr, 0, sizeof(mr));
 
    /* Look at arguments */
    for (int i=1; i<ua->argc; i++) {

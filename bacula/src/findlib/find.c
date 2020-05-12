@@ -51,8 +51,8 @@ FF_PKT *init_find_files()
 {
   FF_PKT *ff;
 
+  /* bmalloc returns zeroed buffer */
   ff = (FF_PKT *)bmalloc(sizeof(FF_PKT));
-  memset(ff, 0, sizeof(FF_PKT));
 
   ff->sys_fname = get_pool_memory(PM_FNAME);
 

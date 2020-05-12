@@ -342,7 +342,7 @@ static void build_path_hierarchy(JCR *jcr, BDB *mdb,
    char pathid[50];
    ATTR_DBR parent;
    char *bkp = mdb->path;
-   strncpy(pathid, org_pathid, sizeof(pathid));
+   bstrncpy(pathid, org_pathid, sizeof(pathid));
 
    /* Does the ppathid exist for this ? we use a memory cache...  In order to
     * avoid the full loop, we consider that if a dir is allready in the

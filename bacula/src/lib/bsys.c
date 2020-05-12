@@ -218,6 +218,9 @@ int bmicrosleep(int32_t sec, int32_t usec)
    return stat;
 }
 
+/* allow using strncpy in this file */
+#undef strncpy
+
 /*
  * Guarantee that the string is properly terminated */
 char *bstrncpy(char *dest, const char *src, int maxlen)
@@ -1007,7 +1010,7 @@ void stack_trace()
             function = ret;
          } else {
             /* demangling failed, just pretend it's a C function with no args */
-            strncpy(function, begin, sz);
+            bstrncpy(function, begin, sz);
             strncat(function, "()", sz);
             function[sz-1] = '\0';
          }

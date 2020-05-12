@@ -366,7 +366,7 @@ void do_restore(JCR *jcr)
    /* ***FIXME*** make configurable */
    crypto_digest_t signing_algorithm = have_sha2 ?
                                        CRYPTO_DIGEST_SHA256 : CRYPTO_DIGEST_SHA1;
-   memset(&rctx, 0, sizeof(rctx));
+   memset((void *)&rctx, 0, sizeof(rctx));
    rctx.jcr = jcr;
 
    /* The following variables keep track of "known unknowns" */

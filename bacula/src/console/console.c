@@ -488,9 +488,7 @@ static ItemList *items = NULL;
 void init_items()
 {
    if (!items) {
-      items = (ItemList*) malloc(sizeof(ItemList));
-      memset(items, 0, sizeof(ItemList));
-
+      items = (ItemList*)bmalloc(sizeof(ItemList));  /* bmalloc clears memory */
    } else {
       items->list.destroy();
    }
@@ -1259,7 +1257,7 @@ int main(int argc, char *argv[])
       exit(0);
    }
 
-   memset(&jcr, 0, sizeof(jcr));
+   memset((void *)&jcr, 0, sizeof(jcr));
 
    (void)WSA_Init();                        /* Initialize Windows sockets */
 

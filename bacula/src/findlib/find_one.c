@@ -86,7 +86,7 @@ static inline int LINKHASH(const struct stat &info)
 static FF_PKT *new_dir_ff_pkt(FF_PKT *ff_pkt)
 {
    FF_PKT *dir_ff_pkt = (FF_PKT *)bmalloc(sizeof(FF_PKT));
-   memcpy(dir_ff_pkt, ff_pkt, sizeof(FF_PKT));
+   memcpy((void *)dir_ff_pkt, (void *)ff_pkt, sizeof(FF_PKT));
    dir_ff_pkt->fname = bstrdup(ff_pkt->fname);
    dir_ff_pkt->link = bstrdup(ff_pkt->link);
    dir_ff_pkt->sys_fname = get_pool_memory(PM_FNAME);

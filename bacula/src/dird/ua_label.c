@@ -1246,7 +1246,7 @@ void status_slots(UAContext *ua, STORE *store_r)
       }
    ua->send_msg(_("+------+----------------------+-----------+-----------------+--------------------+\n"));
 
-      memset(&mr, 0, sizeof(MEDIA_DBR));
+      memset((void *)&mr, 0, sizeof(MEDIA_DBR));
       bstrncpy(mr.VolumeName, vl->VolName, sizeof(mr.VolumeName));
 
       if (mr.VolumeName[0] && db_get_media_record(ua->jcr, ua->db, &mr)) {

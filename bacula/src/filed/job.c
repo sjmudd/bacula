@@ -1180,8 +1180,7 @@ static bool init_fileset(JCR *jcr)
    if (ff->fileset) {
       return false;
    }
-   fileset = (findFILESET *)malloc(sizeof(findFILESET));
-   memset(fileset, 0, sizeof(findFILESET));
+   fileset = (findFILESET *)bmalloc(sizeof(findFILESET));
    ff->fileset = fileset;
    fileset->state = state_none;
    fileset->include_list.init(1, true);
@@ -1307,8 +1306,7 @@ findINCEXE *new_exclude(JCR *jcr)
    findFILESET *fileset = jcr->ff->fileset;
 
    /* New exclude */
-   fileset->incexe = (findINCEXE *)malloc(sizeof(findINCEXE));
-   memset(fileset->incexe, 0, sizeof(findINCEXE));
+   fileset->incexe = (findINCEXE *)bmalloc(sizeof(findINCEXE));
    fileset->incexe->opts_list.init(1, true);
    fileset->incexe->name_list.init();
    fileset->incexe->plugin_list.init();
@@ -1324,8 +1322,7 @@ findINCEXE *new_include(JCR *jcr)
    findFILESET *fileset = jcr->ff->fileset;
 
    /* New include */
-   fileset->incexe = (findINCEXE *)malloc(sizeof(findINCEXE));
-   memset(fileset->incexe, 0, sizeof(findINCEXE));
+   fileset->incexe = (findINCEXE *)bmalloc(sizeof(findINCEXE));
    fileset->incexe->opts_list.init(1, true);
    fileset->incexe->name_list.init(); /* for dlist;  was 1,true for alist */
    fileset->incexe->plugin_list.init();
@@ -1343,8 +1340,7 @@ findINCEXE *new_preinclude(JCR *jcr)
    findFILESET *fileset = jcr->ff->fileset;
 
    /* New pre-include */
-   fileset->incexe = (findINCEXE *)malloc(sizeof(findINCEXE));
-   memset(fileset->incexe, 0, sizeof(findINCEXE));
+   fileset->incexe = (findINCEXE *)bmalloc(sizeof(findINCEXE));
    fileset->incexe->opts_list.init(1, true);
    fileset->incexe->name_list.init(); /* for dlist;  was 1,true for alist */
    fileset->incexe->plugin_list.init();
@@ -1359,8 +1355,7 @@ static findFOPTS *start_options(FF_PKT *ff)
 
    if (state != state_options) {
       ff->fileset->state = state_options;
-      findFOPTS *fo = (findFOPTS *)malloc(sizeof(findFOPTS));
-      memset(fo, 0, sizeof(findFOPTS));
+      findFOPTS *fo = (findFOPTS *)bmalloc(sizeof(findFOPTS));
       fo->regex.init(1, true);
       fo->regexdir.init(1, true);
       fo->regexfile.init(1, true);
@@ -1385,8 +1380,7 @@ void new_options(JCR *jcr, findINCEXE *incexe)
    if (!incexe) {
       incexe = jcr->ff->fileset->incexe;
    }
-   findFOPTS *fo = (findFOPTS *)malloc(sizeof(findFOPTS));
-   memset(fo, 0, sizeof(findFOPTS));
+   findFOPTS *fo = (findFOPTS *)bmalloc(sizeof(findFOPTS));
    fo->regex.init(1, true);
    fo->regexdir.init(1, true);
    fo->regexfile.init(1, true);
