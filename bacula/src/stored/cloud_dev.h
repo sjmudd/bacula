@@ -107,7 +107,8 @@ public:
    bool rewrite_volume_label(DCR *dcr, bool recycle);
    bool start_of_job(DCR *dcr);
    bool end_of_job(DCR *dcr);
-   bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err) { return driver->get_cloud_volumes_list(dcr, volumes, err); };
+   bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err)
+     { return !driver?false:driver->get_cloud_volumes_list(dcr, volumes, err); };
    bool get_cloud_volume_parts_list(DCR *dcr, const char *VolumeName, ilist *parts, POOLMEM *&err) { return driver->get_cloud_volume_parts_list(dcr, VolumeName, parts, err);};
    uint32_t get_cloud_upload_transfer_status(POOL_MEM &msg, bool verbose);
    uint32_t get_cloud_download_transfer_status(POOL_MEM &msg, bool verbose);
