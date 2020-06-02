@@ -2920,6 +2920,9 @@ uint64_t get_memory_info(char *buf, int buflen)
    uint64_t ret=0;
    HANDLE hProcess = GetCurrentProcess();
    PROCESS_MEMORY_COUNTERS pmc;
+   if (!buf) {
+      return ret;
+   }
    buf[0] = '\0';
 
    if (p_GetProcessMemoryInfo) {
