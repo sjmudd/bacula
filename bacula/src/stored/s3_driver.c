@@ -345,7 +345,7 @@ S3Status s3_driver::put_object(transfer *xfer, const char *cache_fname, const ch
    }
 
    ctx.caller = "S3_put_object";
-   S3_put_object(&s3ctx, cloud_fname, ctx.obj_len, NULL, NULL,
+   S3_put_object(&s3ctx, cloud_fname, ctx.obj_len, NULL, NULL, 0,
                &putObjectHandler, &ctx);
 
 get_out:
@@ -442,7 +442,7 @@ bool s3_driver::get_cloud_object(transfer *xfer, const char *cloud_fname, const 
 
    ctx.caller = "S3_get_object";
    S3_get_object(&s3ctx, cloud_fname, &getConditions, startByte,
-                 byteCount, 0, &getObjectHandler, &ctx);
+                 byteCount, NULL, 0, &getObjectHandler, &ctx);
 
    if (fclose(ctx.outfile) < 0) {
       berrno be;
@@ -478,7 +478,7 @@ bool s3_driver::truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *t
       make_cloud_filename(cloud_fname, VolumeName, i);
       Dmsg1(dbglvl, "Object to truncate: %s\n", cloud_fname);
       ctx.caller = "S3_delete_object";
-      S3_delete_object(&s3ctx, cloud_fname, 0, &responseHandler, &ctx);
+      S3_delete_object(&s3ctx, cloud_fname, NULL, 0, &responseHandler, &ctx);
       if (ctx.status != S3StatusOK) {
          /* error message should have been filled within response cb */
          goto get_out;
@@ -665,7 +665,7 @@ bool s3_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, il
    ctx.caller = "S3_list_bucket";
    while (ctx.isTruncated!=0) {
       ctx.isTruncated = 0;
-      S3_list_bucket(&s3ctx, VolumeName, ctx.nextMarker, NULL, 0, NULL,
+      S3_list_bucket(&s3ctx, VolumeName, ctx.nextMarker, NULL, 0, NULL, 0,
                      &partslistBucketHandler, &ctx);
       if (ctx.status != S3StatusOK) {
          pm_strcpy(err, S3Errors[ctx.status]);
@@ -738,7 +738,7 @@ bool s3_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err)
    ctx.caller = "S3_list_bucket";
    while (ctx.isTruncated!=0) {
       ctx.isTruncated = 0;
-      S3_list_bucket(&s3ctx, NULL, ctx.nextMarker, "/", 0, NULL,
+      S3_list_bucket(&s3ctx, NULL, ctx.nextMarker, "/", 0, NULL, 0,
                      &volumeslistBucketHandler, &ctx);
       if (ctx.status != S3StatusOK) {
          break;
