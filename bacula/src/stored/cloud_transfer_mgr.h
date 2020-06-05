@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -72,12 +72,16 @@ public:
    pthread_mutex_t      m_stat_mutex;
    /* size of the transfer: should be filled asap */
    uint64_t             m_stat_size;
+   /* size processed so far : filled by the processor (driver) */
+   uint64_t             m_stat_processed_size;
    /* time when process started */
-   utime_t              m_stat_start;
+   btime_t              m_stat_start;
    /* duration of the transfer : automatically filled when transfer is completed*/
-   utime_t              m_stat_duration;
+   btime_t              m_stat_duration;
    /* estimate time to arrival : predictive guest approximation of transfer time*/
-   utime_t              m_stat_eta;
+   btime_t              m_stat_eta;
+   /* computed bytes/sec transfer rate */
+   uint64_t             m_stat_average_rate;
 
 /* status variables :*/
    /* protect status changes*/
@@ -159,12 +163,22 @@ public:
    bool cancel();
 
    /* callback fct that checks if transfer has been cancelled */
-   bool is_cancelled() const;
+   bool is_canceled() const;
 
    /* append a status message into msg*/
    uint32_t append_status(POOL_MEM& msgs);
+   void append_api_status(OutputWriter &ow);
 
    void set_do_cache_truncate(bool do_cache_truncate);
+
+   /* reset processed size */
+   void reset_processed_size();
+
+   /* set processed size absolute value */
+   void set_processed_size(uint64_t size);
+
+   /* add increment to the current processed size */
+   void increment_processed_size(uint64_t increment);
 
 protected:
 friend class transfer_manager;
@@ -212,11 +226,11 @@ public:
    /* size in bytes of transfers in TRANS_STATE_ERROR state in this manager*/
    uint64_t             m_stat_size_error;
    /* duration of transfers in TRANS_STATE_DONE state in this manager*/
-   utime_t              m_stat_duration_done;
+   btime_t              m_stat_duration_done;
    /* computed bytes/sec transfer rate */
    uint64_t             m_stat_average_rate;
    /* computed Estimate Time to Arrival */
-   utime_t              m_stat_eta;
+   btime_t              m_stat_eta;
 
 
 /* status variables global for this manager: */
@@ -283,6 +297,7 @@ public:
 
    /* append a status message into msg*/
    uint32_t append_status(POOL_MEM& msg, bool verbose);
+   void append_api_status(OutputWriter &ow, bool verbose);
 
 protected:
 friend class transfer;

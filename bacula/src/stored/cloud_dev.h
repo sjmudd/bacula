@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -36,6 +36,12 @@
 #include "cloud_transfer_mgr.h"
 #include "cloud_parts.h"
 
+/* enum loadable drivers */
+enum {
+   C_S3_DRIVER    = 1,
+   C_FILE_DRIVER  = 2
+};
+
 class cloud_dev: public file_dev {
 public:
    int64_t obj_len;
@@ -49,6 +55,8 @@ public:
    uint32_t trunc_opt;
    uint32_t upload_opt;
 
+   uint32_t current_driver_type;
+
    cloud_driver *driver;
 
    static transfer_manager download_mgr;
@@ -56,12 +64,9 @@ public:
 
    cloud_proxy *cloud_prox;
 
-   void add_vol_and_part(POOLMEM *&filename, const char *VolumeName, const char *name, uint32_t part);
-
 private:
-   char *cache_directory;
    bool download_parts_to_read(DCR *dcr, alist* parts);
-   bool upload_part_to_cloud(DCR *dcr, const char *VolumeName, uint32_t part);
+   bool upload_part_to_cloud(DCR *dcr, const char *VolumeName, uint32_t part, bool do_truncate);
    transfer *download_part_to_cache(DCR *dcr, const char *VolumeName,  uint32_t part);
    void make_cache_filename(POOLMEM *&filename, const char *VolumeName, uint32_t part);
    void make_cache_volume_name(POOLMEM *&full_volname, const char *VolumeName);
@@ -86,7 +91,7 @@ public:
    bool open_next_part(DCR *dcr);
    bool truncate(DCR *dcr);
    int  truncate_cache(DCR *dcr, const char *VolName, int64_t *size);
-   bool upload_cache(DCR *dcr, const char *VolName, POOLMEM *&err);
+   bool upload_cache(DCR *dcr, const char *VolName, uint32_t truncate, POOLMEM *&err);
    bool close(DCR *dcr);
    bool update_pos(DCR *dcr);
    bool is_eod_valid(DCR *dcr);
@@ -106,10 +111,9 @@ public:
            bool relabel, bool no_prelabel);
    bool rewrite_volume_label(DCR *dcr, bool recycle);
    bool start_of_job(DCR *dcr);
-   bool end_of_job(DCR *dcr);
-   bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err)
-     { return !driver?false:driver->get_cloud_volumes_list(dcr, volumes, err); };
-   bool get_cloud_volume_parts_list(DCR *dcr, const char *VolumeName, ilist *parts, POOLMEM *&err) { return driver->get_cloud_volume_parts_list(dcr, VolumeName, parts, err);};
+   bool end_of_job(DCR *dcr, uint32_t truncate);
+   bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err);
+   bool get_cloud_volume_parts_list(DCR *dcr, const char *VolumeName, ilist *parts, POOLMEM *&err);
    uint32_t get_cloud_upload_transfer_status(POOL_MEM &msg, bool verbose);
    uint32_t get_cloud_download_transfer_status(POOL_MEM &msg, bool verbose);
 };

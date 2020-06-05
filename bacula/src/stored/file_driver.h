@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -49,15 +49,15 @@ public:
 
 private:
    void make_cloud_filename(POOLMEM *&filename, const char *VolumeName, uint32_t part);
-   bool init(JCR *jcr, cloud_dev *dev, DEVRES *device);
-   bool start_of_job(DCR *dcr);
-   bool end_of_job(DCR *dcr);
-   bool term(DCR *dcr);
-   bool truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *trunc_parts, POOLMEM *&err);
+   bool init(CLOUD *cloud, POOLMEM *&err);
+   bool start_of_job(POOLMEM *&msg);
+   bool end_of_job(POOLMEM *&msg);
+   bool term(POOLMEM *&msg);
+   bool truncate_cloud_volume(const char *VolumeName, ilist *trunc_parts, cancel_callback *cancel_cb, POOLMEM *&err);
    bool copy_cache_part_to_cloud(transfer *xfer);
    bool copy_cloud_part_to_cache(transfer *xfer);
-   bool get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, ilist *parts, POOLMEM *&err);
-   bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err);
+   bool get_cloud_volume_parts_list(const char* VolumeName, ilist *parts, cancel_callback *cancel_cb, POOLMEM *&err);
+   bool get_cloud_volumes_list(alist *volumes, cancel_callback *cancel_cb, POOLMEM *&err);
 
    bool put_object(transfer *xfer, const char *cache_fname, const char *cloud_fname, bwlimit *limit);
    bool get_cloud_object(transfer *xfer, const char *cloud_fname, const char *cache_fname);

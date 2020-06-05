@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -176,7 +176,7 @@ static const char *S3Errors[] = {
  */
 class bacula_ctx {
 public:
-   JCR *jcr;
+   cancel_callback *cancel_cb;
    transfer *xfer;
    POOLMEM *&errMsg;
    ilist *parts;
@@ -189,14 +189,20 @@ public:
    alist *volumes;
    S3Status status;
    bwlimit *limit;        /* Used to control the bandwidth */
-   bacula_ctx(POOLMEM *&err) : jcr(NULL), xfer(NULL), errMsg(err), parts(NULL),
+   bacula_ctx(POOLMEM *&err) : cancel_cb(NULL), xfer(NULL), errMsg(err), parts(NULL),
                               isTruncated(0), nextMarker(NULL), obj_len(0), caller(NULL),
                               infile(NULL), outfile(NULL), volumes(NULL), status(S3StatusOK), limit(NULL)
-   {}
-   bacula_ctx(transfer *t) : jcr(NULL), xfer(t), errMsg(t->m_message), parts(NULL),
+   {
+      /* reset error message (necessary in case of retry) */
+      errMsg[0] = 0;
+   }
+   bacula_ctx(transfer *t) : cancel_cb(NULL), xfer(t), errMsg(t->m_message), parts(NULL),
                               isTruncated(0), nextMarker(NULL), obj_len(0), caller(NULL),
                               infile(NULL), outfile(NULL), volumes(NULL), status(S3StatusOK), limit(NULL)
-   {}
+   {
+      /* reset error message (necessary in case of retry) */
+      errMsg[0] = 0;
+   }
 };
 
 
@@ -275,8 +281,14 @@ static void responseCompleteCallback(
    return;
 }
 
-
-
+bool xfer_cancel_cb(void *arg)
+{
+   transfer *xfer = (transfer*)arg;
+   if (xfer) {
+      return xfer->is_canceled();
+   }
+   return false;
+};
 
 static int putObjectCallback(int buf_len, char *buf, void *callbackCtx)
 {
@@ -285,15 +297,15 @@ static int putObjectCallback(int buf_len, char *buf, void *callbackCtx)
    ssize_t rbytes = 0;
    int read_len;
 
-   if (ctx->xfer->is_cancelled()) {
+   if (ctx->xfer->is_canceled()) {
       Mmsg(ctx->errMsg, _("Job cancelled.\n"));
       return -1;
    }
    if (ctx->obj_len) {
       read_len = (ctx->obj_len > buf_len) ? buf_len : ctx->obj_len;
       rbytes = fread(buf, 1, read_len, ctx->infile);
-      Dmsg5(dbglvl, "%s thread=%lu rbytes=%d bufsize=%u remlen=%lu\n",
-             ctx->caller,  pthread_self(), rbytes, buf_len, ctx->obj_len);
+      Dmsg6(dbglvl, "%s xfer=part.%lu thread=%lu rbytes=%d bufsize=%u remlen=%lu\n",
+             ctx->caller, ctx->xfer->m_part, pthread_self(), rbytes, buf_len, ctx->obj_len);
       if (rbytes <= 0) {
          berrno be;
          Mmsg(ctx->errMsg, "%s Error reading input file: ERR=%s\n",
@@ -301,7 +313,7 @@ static int putObjectCallback(int buf_len, char *buf, void *callbackCtx)
          goto get_out;
       }
       ctx->obj_len -= rbytes;
-
+      ctx->xfer->increment_processed_size(rbytes);
       if (ctx->limit) {
          ctx->limit->control_bwlimit(rbytes);
       }
@@ -356,15 +368,16 @@ get_out:
    /* no error so far -> retrieve uploaded part info */
    if (ctx.errMsg[0] == 0) {
       ilist parts;
-      get_cloud_volume_parts_list(xfer->m_dcr, cloud_fname, &parts, ctx.errMsg);
-      for (int i=1; i <= parts.last_index() ; i++) {
-         cloud_part *p = (cloud_part *)parts.get(i);
+      if (get_one_cloud_volume_part(cloud_fname, &parts, ctx.errMsg)) {
+         /* only one part is returned */
+         cloud_part *p = (cloud_part *)parts.get(parts.last_index());
          if (p) {
-            xfer->m_res_size = p->size;
-            xfer->m_res_mtime = p->mtime;
-            break; /* not need to go further */
+         xfer->m_res_size = p->size;
+         xfer->m_res_mtime = p->mtime;
          }
       }
+   } else {
+      Dmsg1(dbglvl, "put_object ERROR: %s\n", ctx.errMsg);
    }
 
    return ctx.status;
@@ -377,7 +390,7 @@ static S3Status getObjectDataCallback(int buf_len, const char *buf,
    ssize_t wbytes;
 
    Enter(dbglvl);
-   if (ctx->xfer->is_cancelled()) {
+   if (ctx->xfer->is_canceled()) {
        Mmsg(ctx->errMsg, _("Job cancelled.\n"));
        return S3StatusAbortedByCallback;
    }
@@ -389,7 +402,7 @@ static S3Status getObjectDataCallback(int buf_len, const char *buf,
          ctx->caller, be.bstrerror());
       return S3StatusAbortedByCallback;
    }
-
+   ctx->xfer->increment_processed_size(wbytes);
    if (ctx->limit) {
       ctx->limit->control_bwlimit(wbytes);
    }
@@ -457,12 +470,11 @@ get_out:
 /*
  * Not thread safe
  */
-bool s3_driver::truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *trunc_parts, POOLMEM *&err)
+bool s3_driver::truncate_cloud_volume(const char *VolumeName, ilist *trunc_parts, cancel_callback *cancel_cb, POOLMEM *&err)
 {
    Enter(dbglvl);
 
    bacula_ctx ctx(err);
-   ctx.jcr = dcr->jcr;
 
    int last_index = (int)trunc_parts->last_index();
    POOLMEM *cloud_fname = get_pool_memory(PM_FNAME);
@@ -470,7 +482,7 @@ bool s3_driver::truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *t
       if (!trunc_parts->get(i)) {
          continue;
       }
-      if (ctx.jcr->is_canceled()) {
+      if (cancel_cb && cancel_cb->fct && cancel_cb->fct(cancel_cb->arg)) {
          Mmsg(err, _("Job cancelled.\n"));
          goto get_out;
       }
@@ -496,7 +508,7 @@ void s3_driver::make_cloud_filename(POOLMEM *&filename,
 {
    Enter(dbglvl);
    filename[0] = 0;
-   dev->add_vol_and_part(filename, VolumeName, "part", apart);
+   add_vol_and_part(filename, VolumeName, "part", apart);
    Dmsg1(dbglvl, "make_cloud_filename: %s\n", filename);
 }
 
@@ -519,6 +531,8 @@ bool s3_driver::copy_cache_part_to_cloud(transfer *xfer)
    uint32_t retry = max_upload_retries;
    S3Status status = S3StatusOK;
    do {
+      /* when the driver decide to retry, it must reset the processed size */
+      xfer->reset_processed_size();
       status = put_object(xfer, xfer->m_cache_fname, cloud_fname);
       --retry;
    } while (retry_put_object(status) && (retry>0));
@@ -543,14 +557,21 @@ bool s3_driver::copy_cloud_part_to_cache(transfer *xfer)
  * NOTE: See the SD Cloud resource in stored_conf.h
 */
 
-bool s3_driver::init(JCR *jcr, cloud_dev *adev, DEVRES *adevice)
+bool s3_driver::init(CLOUD *cloud, POOLMEM *&err)
 {
    S3Status status;
-
-   dev = adev;            /* copy cloud device pointer */
-   device = adevice;      /* copy device resource pointer */
-   cloud = device->cloud; /* local pointer to cloud definition */
-
+   if (cloud->host_name == NULL) {
+      Mmsg1(err, "Failed to initialize S3 Cloud. ERR=Hostname not set in cloud resource %s\n", cloud->hdr.name);
+      return false;
+   }
+   if (cloud->access_key == NULL) {
+      Mmsg1(err, "Failed to initialize S3 Cloud. ERR=AccessKey not set in cloud resource %s\n", cloud->hdr.name);
+      return false;
+   }
+   if (cloud->secret_key == NULL) {
+      Mmsg1(err, "Failed to initialize S3 Cloud. ERR=SecretKey not set in cloud resource %s\n", cloud->hdr.name);
+      return false;
+   }
    /* Setup bucket context for S3 lib */
    s3ctx.hostName = cloud->host_name;
    s3ctx.bucketName = cloud->bucket_name;
@@ -560,46 +581,34 @@ bool s3_driver::init(JCR *jcr, cloud_dev *adev, DEVRES *adevice)
    s3ctx.secretAccessKey = cloud->secret_key;
    s3ctx.authRegion = cloud->region;
 
-   /* File I/O buffer */
-   buf_len = dev->max_block_size;
-   if (buf_len == 0) {
-      buf_len = DEFAULT_BLOCK_SIZE;
-   }
-
    if ((status = S3_initialize("s3", S3_INIT_ALL, s3ctx.hostName)) != S3StatusOK) {
-      Mmsg1(dev->errmsg, "Failed to initialize S3 lib. ERR=%s\n", S3_get_status_name(status));
-      Qmsg1(jcr, M_FATAL, 0, "%s", dev->errmsg);
-      Tmsg1(0, "%s", dev->errmsg);
+      Mmsg1(err, "Failed to initialize S3 lib. ERR=%s\n", S3_get_status_name(status));
       return false;
    }
    return true;
 }
 
-bool s3_driver::start_of_job(DCR *dcr)
+bool s3_driver::start_of_job(POOLMEM *&msg)
 {
-   Jmsg(dcr->jcr, M_INFO, 0, _("Using S3 cloud driver Host=%s Bucket=%s\n"),
-      s3ctx.hostName, s3ctx.bucketName);
+   if (msg) {
+      Mmsg(msg, _("Using S3 cloud driver Host=%s Bucket=%s\n"), s3ctx.hostName, s3ctx.bucketName);
+   }
    return true;
 }
 
-bool s3_driver::end_of_job(DCR *dcr)
+bool s3_driver::end_of_job(POOLMEM *&msg)
 {
    return true;
 }
 
-/*
- * Note, dcr may be NULL
- */
-bool s3_driver::term(DCR *dcr)
+bool s3_driver::term(POOLMEM *&msg)
 {
    S3_deinitialize();
    return true;
 }
 
-
-
 /*
- * libs3 callback for get_cloud_volume_parts_list()
+ * libs3 callback for get_num_cloud_volume_parts_list()
  */
 static S3Status partslistBucketCallback(
    int isTruncated,
@@ -623,6 +632,7 @@ static S3Status partslistBucketCallback(
          part->mtime = obj->lastModified;
          part->size  = obj->size;
          ctx->parts->put(part->index, part);
+         Dmsg1(dbglvl, "partslistBucketCallback: part.%d retrieved\n", part->index);
       }
    }
 
@@ -630,12 +640,14 @@ static S3Status partslistBucketCallback(
    if (ctx->nextMarker) {
       bfree_and_null(ctx->nextMarker);
    }
-   if (nextMarker) {
-      ctx->nextMarker = bstrdup(nextMarker);
+   if (isTruncated && numObj>0) {
+      /* Workaround a bug with nextMarker */
+      const S3ListBucketContent *obj = &(object[numObj-1]);
+      ctx->nextMarker = bstrdup(obj->key);
    }
 
    Leave(dbglvl);
-   if (ctx->jcr->is_canceled()) {
+   if (ctx->cancel_cb && ctx->cancel_cb->fct && ctx->cancel_cb->fct(ctx->cancel_cb->arg)) {
       Mmsg(ctx->errMsg, _("Job cancelled.\n"));
       return S3StatusAbortedByCallback;
    }
@@ -648,9 +660,8 @@ S3ListBucketHandler partslistBucketHandler =
    &partslistBucketCallback
 };
 
-bool s3_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, ilist *parts, POOLMEM *&err)
+bool s3_driver::get_cloud_volume_parts_list(const char* VolumeName, ilist *parts, cancel_callback *cancel_cb, POOLMEM *&err)
 {
-   JCR *jcr = dcr->jcr;
    Enter(dbglvl);
 
    if (!parts || strlen(VolumeName) == 0) {
@@ -659,7 +670,7 @@ bool s3_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, il
    }
 
    bacula_ctx ctx(err);
-   ctx.jcr = jcr;
+   ctx.cancel_cb = cancel_cb;
    ctx.parts = parts;
    ctx.isTruncated = 1; /* pass into the while loop at least once */
    ctx.caller = "S3_list_bucket";
@@ -667,6 +678,7 @@ bool s3_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, il
       ctx.isTruncated = 0;
       S3_list_bucket(&s3ctx, VolumeName, ctx.nextMarker, NULL, 0, NULL, 0,
                      &partslistBucketHandler, &ctx);
+      Dmsg4(dbglvl, "get_cloud_volume_parts_list isTruncated=%d, nextMarker=%s, nbparts=%d, err=%s\n", ctx.isTruncated, ctx.nextMarker, ctx.parts->size(), ctx.errMsg?ctx.errMsg:"None");
       if (ctx.status != S3StatusOK) {
          pm_strcpy(err, S3Errors[ctx.status]);
          bfree_and_null(ctx.nextMarker);
@@ -675,7 +687,33 @@ bool s3_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, il
    }
    bfree_and_null(ctx.nextMarker);
    return true;
+}
 
+bool s3_driver::get_one_cloud_volume_part(const char* part_path_name, ilist *parts, POOLMEM *&err)
+{
+   Enter(dbglvl);
+
+   if (!parts || strlen(part_path_name) == 0) {
+      pm_strcpy(err, "Invalid argument");
+      return false;
+   }
+
+   bacula_ctx ctx(err);
+   ctx.parts = parts;
+   ctx.isTruncated = 0; /* ignore truncation in this case */
+   ctx.caller = "S3_list_bucket";
+   /* S3 documentation claims the parts will be returned in binary order */
+   /* so part.1 < part.11 b.e. This assumed, the first part retrieved is the one we seek */
+   S3_list_bucket(&s3ctx, part_path_name, ctx.nextMarker, NULL, 1, NULL, 0, &partslistBucketHandler, &ctx);
+   Dmsg4(dbglvl, "get_one_cloud_volume_part isTruncated=%d, nextMarker=%s, nbparts=%d, err=%s\n", ctx.isTruncated, ctx.nextMarker, ctx.parts->size(), ctx.errMsg?ctx.errMsg:"None");
+   if (ctx.status != S3StatusOK) {
+      pm_strcpy(err, S3Errors[ctx.status]);
+      bfree_and_null(ctx.nextMarker);
+      return false;
+   }
+
+   bfree_and_null(ctx.nextMarker);
+   return true;
 }
 
 /*
@@ -703,12 +741,14 @@ static S3Status volumeslistBucketCallback(
    if (ctx->nextMarker) {
       bfree_and_null(ctx->nextMarker);
    }
-   if (nextMarker) {
-      ctx->nextMarker = bstrdup(nextMarker);
+   if (isTruncated && numObj>0) {
+      /* Workaround a bug with nextMarker */
+      const S3ListBucketContent *obj = &(object[numObj-1]);
+      ctx->nextMarker = bstrdup(obj->key);
    }
 
    Leave(dbglvl);
-   if (ctx->jcr->is_canceled()) {
+   if (ctx->cancel_cb && ctx->cancel_cb->fct && ctx->cancel_cb->fct(ctx->cancel_cb->arg)) {
       Mmsg(ctx->errMsg, _("Job cancelled.\n"));
       return S3StatusAbortedByCallback;
    }
@@ -721,9 +761,8 @@ S3ListBucketHandler volumeslistBucketHandler =
    &volumeslistBucketCallback
 };
 
-bool s3_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err)
+bool s3_driver::get_cloud_volumes_list(alist *volumes, cancel_callback *cancel_cb, POOLMEM *&err)
 {
-   JCR *jcr = dcr->jcr;
    Enter(dbglvl);
 
    if (!volumes) {
@@ -733,7 +772,7 @@ bool s3_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err)
 
    bacula_ctx ctx(err);
    ctx.volumes = volumes;
-   ctx.jcr = jcr;
+   ctx.cancel_cb = cancel_cb;
    ctx.isTruncated = 1; /* pass into the while loop at least once */
    ctx.caller = "S3_list_bucket";
    while (ctx.isTruncated!=0) {
@@ -747,60 +786,5 @@ bool s3_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err)
    bfree_and_null(ctx.nextMarker);
    return (err[0] == 0);
 }
-
-#ifdef really_needed
-static S3Status listBucketCallback(
-   int isTruncated,
-   const char *nextMarker,
-   int contentsCount,
-   const S3ListBucketContent *contents,
-   int commonPrefixesCount,
-   const char **commonPrefixes,
-   void *callbackData);
-
-S3ListBucketHandler listBucketHandler =
-{
-   responseHandler,
-   &listBucketCallback
-};
-
-
-/*
- * List content of a bucket
- */
-static S3Status listBucketCallback(
-   int isTruncated,
-   const char *nextMarker,
-   int numObj,
-   const S3ListBucketContent *contents,
-   int commonPrefixesCount,
-   const char **commonPrefixes,
-   void *callbackData)
-{
-   bacula_ctx *ctx = (bacula_ctx *)callbackCtx;
-   if (print_hdr) {
-      Pmsg1(000, "\n%-22s", "      Object Name");
-      Pmsg2(000, "  %-5s  %-20s", "Size", "   Last Modified");
-      Pmsg0(000, "\n----------------------  -----  --------------------\n");
-      print_hdr = false;   /* print header once only */
-   }
-
-   for (int i = 0; i < numObj; i++) {
-      char timebuf[256];
-      char sizebuf[16];
-      const S3ListBucketContent *content = &(contents[i]);
-      time_t t = (time_t) content->lastModified;
-      strftime(timebuf, sizeof(timebuf), "%Y-%m-%dT%H:%M:%SZ", gmtime(&t));
-      sprintf(sizebuf, "%5llu", (unsigned long long) content->size);
-      Pmsg3(000, "%-22s  %s  %s\n", content->key, sizebuf, timebuf);
-   }
-   Pmsg0(000, "\n");
-   if (ctx->jcr->is_canceled()) {
-      Mmsg(ctx->errMsg, _("Job cancelled.\n"));
-      return S3StatusAbortedByCallback;
-   }
-   return S3StatusOK;
-}
-#endif
 
 #endif /* HAVE_LIBS3 */

@@ -1,25 +1,24 @@
 /*
-   Bacula(R) - The Network Backup Solution
+   Bacula® - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2016 Bacula Systems SA
+   All rights reserved.
 
-   The original author of Bacula is Kern Sibbald, with contributions
-   from many others, a complete list can be found in the file AUTHORS.
+   The main author of Bacula is Kern Sibbald, with contributions from many
+   others, a complete list can be found in the file AUTHORS.
 
-   You may use this file and others of this release according to the
-   license defined in the LICENSE file, which includes the Affero General
-   Public License, v3.0 ("AGPLv3") and some additional permissions and
-   terms pursuant to its AGPLv3 Section 7.
+   Licensees holding a valid Bacula Systems SA license may use this file
+   and others of this release in accordance with the proprietary license
+   agreement provided in the LICENSE file.  Redistribution of any part of
+   this release is not permitted.
 
-   This notice must be preserved when any source code is
-   conveyed and/or propagated.
-
-   Bacula(R) is a registered trademark of Kern Sibbald.
+   Bacula® is a registered trademark of Kern Sibbald.
 */
 /*
  * Routines for writing Cloud drivers
  *
  * Written by Kern Sibbald, May MMXVI
+ *
  */
 
 #include "bacula.h"
@@ -34,10 +33,12 @@
 #define NUM_UPLOAD_RETRIES 2
 class cloud_dev;
 
-enum {
-   C_S3_DRIVER    = 1,
-   C_FILE_DRIVER  = 2
-};
+/* define the cancel callback type */
+typedef bool (cancel_cb_type)(void*);
+typedef struct  {
+  cancel_cb_type* fct;
+   void *arg;
+} cancel_callback;
 
 /* Abstract class cannot be instantiated */
 class cloud_driver: public SMARTALLOC {
@@ -47,14 +48,26 @@ public:
 
    virtual bool copy_cache_part_to_cloud(transfer *xfer) = 0;
    virtual bool copy_cloud_part_to_cache(transfer *xfer) = 0;
-   virtual bool truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *trunc_parts, POOLMEM *&err) = 0;
-   virtual bool init(JCR *jcr, cloud_dev *dev, DEVRES *device) = 0;
-   virtual bool term(DCR *dcr) = 0;
-   virtual bool start_of_job(DCR *dcr) = 0;
-   virtual bool end_of_job(DCR *dcr) = 0;
+   virtual bool truncate_cloud_volume(const char *VolumeName, ilist *trunc_parts, cancel_callback *cancel_cb, POOLMEM *&err) = 0;
+   virtual bool init(CLOUD *cloud, POOLMEM *&err) = 0;
+   virtual bool term(POOLMEM *&err) = 0;
+   virtual bool start_of_job(POOLMEM *&err) = 0;
+   virtual bool end_of_job(POOLMEM *&err) = 0;
+   virtual bool get_cloud_volume_parts_list(const char* VolumeName, ilist *parts, cancel_callback *cancel_cb, POOLMEM *&err) = 0;
+   virtual bool get_cloud_volumes_list(alist *volumes, cancel_callback *cancel_cb, POOLMEM *&err) = 0;
+   static void add_vol_and_part(POOLMEM *&filename, const char *VolumeName, const char *name, uint32_t apart)
+   {
+      char partnumber[20];
+      int len = strlen(filename);
 
-   virtual bool get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, ilist *parts, POOLMEM *&err) = 0;
-   virtual bool get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err) = 0; /* TODO: Adapt the prototype to have a handler instead */
+      if (len > 0 && !IsPathSeparator((filename)[len-1])) {
+         pm_strcat(filename, "/");
+      }
+
+      pm_strcat(filename, VolumeName);
+      bsnprintf(partnumber, sizeof(partnumber), "/%s.%d", name, apart);
+      pm_strcat(filename, partnumber);
+   }
 
    bwlimit upload_limit;
    bwlimit download_limit;

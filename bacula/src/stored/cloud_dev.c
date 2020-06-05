@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -219,10 +219,12 @@ void *download_engine(transfer *tpkt)
 /*
  * Upload the given part to the cloud
  */
-bool cloud_dev::upload_part_to_cloud(DCR *dcr, const char *VolumeName, uint32_t upart)
+bool cloud_dev::upload_part_to_cloud(DCR *dcr, const char *VolumeName, uint32_t upart, bool do_truncate)
 {
-   if (upload_opt == UPLOAD_NO) {
-      /* lets pretend everything is OK */
+   /* for a "regular" backup job, don't proceed with the upload, but pretend everything went OK. */
+   /* Otherwise, pass thru and proceed with the upload, even if UPLOAD_NO is set */
+   bool internal_job = dcr->jcr->is_internal_job() || dcr->jcr->is_JobType(JT_ADMIN);
+   if ((upload_opt == UPLOAD_NO) && !internal_job) {
       return true;
    }
    bool ret=false;
@@ -274,8 +276,9 @@ bool cloud_dev::upload_part_to_cloud(DCR *dcr, const char *VolumeName, uint32_t 
    dcr->uploads->append(item);
    /* transfer are queued manually, so the caller has control on when the transfer is scheduled
     * this should come handy for upload_opt */
-   item->set_do_cache_truncate(trunc_opt == TRUNC_AFTER_UPLOAD);
-   if (upload_opt == UPLOAD_EACHPART) {
+   item->set_do_cache_truncate(do_truncate);
+   if ( (upload_opt == UPLOAD_EACHPART) ||
+        ((upload_opt == UPLOAD_NO) && internal_job) ) {
       /* in each part upload option, queue right away */
       item->queue();
    }
@@ -325,8 +328,8 @@ transfer *cloud_dev::download_part_to_cache(DCR *dcr, const char *VolumeName, ui
       pm_strcpy(cache_fname, dev_name);
       /* create a uniq xfer file name with XFER_TMP_NAME and the pid */
       char  xferbuf[32];
-      bsnprintf(xferbuf, sizeof(xferbuf), "%s_%d", XFER_TMP_NAME, (int)getpid());
-      add_vol_and_part(cache_fname, VolumeName, xferbuf, dpart);
+      bsnprintf(xferbuf, sizeof(xferbuf), "%s_%d_%d", XFER_TMP_NAME, (int)getpid(), (int)dcr->jcr->JobId);
+      cloud_driver::add_vol_and_part(cache_fname, VolumeName, xferbuf, dpart);
 
       /* use the cloud proxy to retrieve the transfer size */
       uint64_t cloud_size = cloud_prox->get_size(VolumeName, dpart);
@@ -495,7 +498,6 @@ bool cloud_dev::get_cache_sizes(DCR *dcr, const char *VolumeName)
    POOLMEM *fname = get_pool_memory(PM_NAME);
    uint32_t cpart;
    bool ok = false;
-
    POOL_MEM dname(PM_FNAME);
    int status = 0;
 
@@ -599,32 +601,13 @@ get_out:
    return ok;
 }
 
-
-/* Utility routines */
-
-void cloud_dev::add_vol_and_part(POOLMEM *&filename,
-        const char *VolumeName, const char *name, uint32_t apart)
-{
-   Enter(dbglvl);
-   char partnumber[20];
-   int len = strlen(filename);
-
-   if (len > 0 && !IsPathSeparator((filename)[len-1])) {
-      pm_strcat(filename, "/");
-   }
-
-   pm_strcat(filename, VolumeName);
-   bsnprintf(partnumber, sizeof(partnumber), "/%s.%d", name, apart);
-   pm_strcat(filename, partnumber);
-}
-
 void cloud_dev::make_cache_filename(POOLMEM *&filename,
         const char *VolumeName, uint32_t upart)
 {
    Enter(dbglvl);
 
    pm_strcpy(filename, dev_name);
-   add_vol_and_part(filename, VolumeName, "part", upart);
+   cloud_driver::add_vol_and_part(filename, VolumeName, "part", upart);
 }
 
 void cloud_dev::make_cache_volume_name(POOLMEM *&volname,
@@ -655,7 +638,7 @@ cloud_dev::~cloud_dev()
       cache_sizes = NULL;
    }
    if (driver) {
-      driver->term(NULL);
+      driver->term(errmsg);
       delete driver;
       driver = NULL;
    }
@@ -709,13 +692,16 @@ cloud_dev::cloud_dev(JCR *jcr, DEVRES *device)
          download_mgr.m_wq.max_workers = device->cloud->max_concurrent_downloads;
       }
 
+      POOL_MEM err;             /* device->errmsg is not yet ready */
       /* Initialize the driver */
-      driver->init(jcr, this, device);
+      if (!driver->init(device->cloud, err.addr())) {
+         Qmsg1(jcr, M_FATAL, 0, "Cloud driver initialization error %s\n", err.c_str());
+         Tmsg1(0, "Cloud driver initialization error %s\n", err.c_str());
+      }
    }
 
    /* the cloud proxy owns its cloud_parts, so we can 'set and forget' them */
    cloud_prox = cloud_proxy::get_instance();
-
 }
 
 /*
@@ -1156,7 +1142,7 @@ bool cloud_dev::close(DCR *dcr)
 
    /* Ensure the last written part is uploaded */
    if ((part > 0) && dcr->is_writing()) {
-      if (!upload_part_to_cloud(dcr, VolHdr.VolumeName, part)) {
+      if (!upload_part_to_cloud(dcr, VolHdr.VolumeName, part, (trunc_opt == TRUNC_AFTER_UPLOAD))) {
          if (errmsg[0]) {
             Qmsg(dcr->jcr, M_ERROR, 0, "%s", errmsg);
          }
@@ -1219,7 +1205,10 @@ bool cloud_dev::probe_cloud_proxy(DCR *dcr,const char *VolName, bool force)
       jcr_not_killable jkl(dcr->jcr);
       ilist cloud_parts(100, false); /* !! dont own the parts here */
       /* first, retrieve the volume content within cloud_parts list*/
-      if (!driver->get_cloud_volume_parts_list(dcr, VolName, &cloud_parts, errmsg)) {
+      cancel_callback cancel_cb;
+      cancel_cb.fct = DCR_cancel_cb;
+      cancel_cb.arg = dcr;
+      if (!driver->get_cloud_volume_parts_list(VolName, &cloud_parts, &cancel_cb, errmsg)) {
          Dmsg2(dbglvl, "Cannot get cloud sizes for Volume=%s Err=%s\n", VolName, errmsg);
          return false;
       }
@@ -1319,8 +1308,8 @@ bool cloud_dev::truncate(DCR *dcr)
    bool ok = false;
    POOL_MEM dname(PM_FNAME);
    int status = 0;
-   ilist * iuploads = New(ilist(100,true)); /* owns the parts */
-   ilist *truncate_list = NULL;
+   ilist * iuploads=New(ilist(100,true)); /* owns the parts */
+   ilist *truncate_list=NULL;
    FILE *fp;
    errmsg[0] = 0;
    Enter(dbglvl);
@@ -1435,10 +1424,16 @@ bool cloud_dev::truncate(DCR *dcr)
       iuploads->put(part->index, part);
    }
    /* returns the list of items to truncate : cloud parts-uploads*/
+   cancel_callback cancel_cb;
+   cancel_cb.fct = DCR_cancel_cb;
+   cancel_cb.arg = dcr;
    truncate_list = cloud_prox->exclude(getVolCatName(), iuploads);
-   if (truncate_list && !driver->truncate_cloud_volume(dcr, getVolCatName(), truncate_list, errmsg)) {
-      Qmsg(dcr->jcr, M_ERROR, 0, "truncate_cloud_volume for %s: ERR=%s\n", getVolCatName(), errmsg);
+   if (truncate_list && !driver->truncate_cloud_volume(getVolCatName(), truncate_list, &cancel_cb, errmsg)) {
+      Dmsg1(dbglvl, "%s", errmsg);
+      Qmsg(dcr->jcr, M_ERROR, 0, "%s", errmsg);
       goto get_out;
+   } else {
+      Dmsg1(dbglvl, "%s", errmsg);
    }
    /* force proxy refresh (volume should be empty so it should be fast) */
    /* another approach would be to reuse truncate_list to remove items */
@@ -1605,7 +1600,7 @@ bool cloud_dev::open_next_part(DCR *dcr)
    /* Write part to cloud */
    Dmsg2(dbglvl, "=== part=%d num_cache_parts=%d\n", part, num_cache_parts);
    if (dcr->is_writing()) {
-      if (!upload_part_to_cloud(dcr, getVolCatName(), part)) {
+      if (!upload_part_to_cloud(dcr, getVolCatName(), part, (trunc_opt == TRUNC_AFTER_UPLOAD))) {
          if (errmsg[0]) {
             Qmsg(dcr->jcr, M_ERROR, 0, "%s", errmsg);
          }
@@ -1900,10 +1895,14 @@ bool cloud_dev::do_size_checks(DCR *dcr, DEV_BLOCK *block)
 
 bool cloud_dev::start_of_job(DCR *dcr)
 {
+   bool ret=false;
    if (driver) {
-      driver->start_of_job(dcr);
+      ret = driver->start_of_job(errmsg);
+   } else {
+      Mmsg(errmsg, "Cloud driver not properly loaded"); /* We should always have a dummy driver */
    }
-   return true;
+   Jmsg(dcr->jcr, ret? M_INFO : M_FATAL, 0, "%s\n", errmsg);
+   return ret;
 }
 
 
@@ -1950,7 +1949,7 @@ static void update_volume_record(DCR *dcr, transfer *ppkt)
    }
 }
 
-bool cloud_dev::end_of_job(DCR *dcr)
+bool cloud_dev::end_of_job(DCR *dcr, uint32_t truncate)
 {
    Enter(dbglvl);
    transfer *tpkt;            /* current packet */
@@ -2012,10 +2011,10 @@ bool cloud_dev::end_of_job(DCR *dcr)
          tpkt->append_status(umsg);
          Jmsg(dcr->jcr, (tpkt->m_state == TRANS_STATE_ERROR) ? M_ERROR : M_INFO, 0, "%s%s", prefix, umsg.c_str());
          Dmsg1(dbglvl, "%s", umsg.c_str());
-
+         bool do_truncate = (truncate==TRUNC_AT_ENDOFJOB) || (truncate==TRUNC_CONF_DEFAULT && trunc_opt==TRUNC_AT_ENDOFJOB);
          if (tpkt->m_state == TRANS_STATE_ERROR) {
             Mmsg(dcr->jcr->StatusErrMsg, _("Upload to Cloud failed"));
-         } else if (trunc_opt == TRUNC_AT_ENDOFJOB && tpkt->m_part!=1) {
+         } else if (do_truncate && tpkt->m_part!=1) {
             /* else -> don't remove the cache file if the upload failed */
             if (unlink(tpkt->m_cache_fname) != 0) {
                berrno be;
@@ -2056,7 +2055,7 @@ bool cloud_dev::end_of_job(DCR *dcr)
    dcr->uploads->destroy();
 
    if (driver) {
-      driver->end_of_job(dcr);
+      driver->end_of_job(errmsg);
    }
 
    Leave(dbglvl);
@@ -2096,12 +2095,28 @@ bool cloud_dev::wait_end_of_transfer(DCR *dcr, transfer *elem)
    Leave(dbglvl);
    return (stat == 0);
 }
+/* return the volumes list */
+bool cloud_dev::get_cloud_volumes_list(DCR* dcr, alist *volumes, POOLMEM *&err)
+{
+   cancel_callback cancel_cb;
+   cancel_cb.fct = DCR_cancel_cb;
+   cancel_cb.arg = dcr;
+   return driver->get_cloud_volumes_list(volumes, &cancel_cb, err);
+}
+
+/* return the list of parts contained in VolumeName */
+bool cloud_dev::get_cloud_volume_parts_list(DCR *dcr, const char *VolumeName, ilist *parts, POOLMEM *&err)
+{
+   cancel_callback cancel_cb;
+   cancel_cb.fct = DCR_cancel_cb;
+   cancel_cb.arg = dcr;
+   return driver->get_cloud_volume_parts_list(VolumeName, parts,  &cancel_cb, err);
+}
 
 /* TODO: Add .api2 mode for the status message */
 /* format a status message of the cloud transfers. Verbose gives details on each transfer */
 uint32_t cloud_dev::get_cloud_upload_transfer_status(POOL_MEM& msg, bool verbose)
 {
-   upload_mgr.update_statistics();
    uint32_t ret = 0;
    ret = Mmsg(msg,_("   Uploads   "));
    ret += upload_mgr.append_status(msg, verbose);
@@ -2111,7 +2126,6 @@ uint32_t cloud_dev::get_cloud_upload_transfer_status(POOL_MEM& msg, bool verbose
 /* format a status message of the cloud transfers. Verbose gives details on each transfer */
 uint32_t cloud_dev::get_cloud_download_transfer_status(POOL_MEM& msg, bool verbose)
 {
-   download_mgr.update_statistics();
    uint32_t ret = 0;
    ret = Mmsg(msg,_("   Downloads "));
    ret += download_mgr.append_status(msg, verbose);
@@ -2243,7 +2257,7 @@ get_out:
 /*
  * Upload cache parts that are not in the cloud
  */
-bool cloud_dev::upload_cache(DCR *dcr, const char *VolumeName, POOLMEM *&err)
+bool cloud_dev::upload_cache(DCR *dcr, const char *VolumeName, uint32_t truncate, POOLMEM *&err)
 {
    int i;
    Enter(dbglvl);
@@ -2252,8 +2266,10 @@ bool cloud_dev::upload_cache(DCR *dcr, const char *VolumeName, POOLMEM *&err)
    ilist cache_parts;
    POOLMEM *vol_dir = get_pool_memory(PM_NAME);
    POOLMEM *fname = get_pool_memory(PM_NAME);
-
-   if (!driver->get_cloud_volume_parts_list(dcr, VolumeName, &cloud_parts, err)) {
+   cancel_callback cancel_cb;
+   cancel_cb.fct = DCR_cancel_cb;
+   cancel_cb.arg = dcr;
+   if (!driver->get_cloud_volume_parts_list(VolumeName, &cloud_parts, &cancel_cb, err)) {
       Qmsg2(dcr->jcr, M_ERROR, 0, "Error while uploading parts for volume %s. %s\n", VolumeName, err);
       ret = false;
       goto bail_out;
@@ -2284,7 +2300,8 @@ bool cloud_dev::upload_cache(DCR *dcr, const char *VolumeName, POOLMEM *&err)
       }
       Mmsg(fname, "%s/part.%d", vol_dir, i);
       Dmsg1(dbglvl, "Do upload of %s\n", fname);
-      if (!upload_part_to_cloud(dcr, VolumeName, i)) {
+      bool do_truncate = (truncate==TRUNC_AFTER_UPLOAD) || (truncate==TRUNC_CONF_DEFAULT && (trunc_opt == TRUNC_AFTER_UPLOAD));
+      if (!upload_part_to_cloud(dcr, VolumeName, i, do_truncate)) {
          if (errmsg[0]) {
             Qmsg(dcr->jcr, M_ERROR, 0, "%s", errmsg);
          }

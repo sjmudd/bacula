@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -125,7 +125,7 @@ bool file_driver::put_object(transfer *xfer, const char *in_fname, const char *o
    }
 
    while (obj_len > 0) {
-      if (xfer->is_cancelled()) {
+      if (xfer->is_canceled()) {
          Mmsg(xfer->m_message, "Job is canceled.\n");
          goto get_out;
       }
@@ -147,6 +147,7 @@ bool file_driver::put_object(transfer *xfer, const char *in_fname, const char *o
             out_fname, be.bstrerror());
       }
       obj_len -= rbytes;
+      xfer->increment_processed_size(rbytes);
       if (limit->use_bwlimit()) {
          limit->control_bwlimit(rbytes);
       }
@@ -177,7 +178,7 @@ bool file_driver::get_cloud_object(transfer *xfer, const char *cloud_fname, cons
    return put_object(xfer, cloud_fname, cache_fname, &download_limit);
 }
 
-bool file_driver::truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist *trunc_parts, POOLMEM *&err)
+bool file_driver::truncate_cloud_volume(const char *VolumeName, ilist *trunc_parts, cancel_callback *cancel_cb, POOLMEM *&err)
 {
    bool rtn = true;
    int i;
@@ -189,12 +190,10 @@ bool file_driver::truncate_cloud_volume(DCR *dcr, const char *VolumeName, ilist 
       make_cloud_filename(filename, VolumeName, i);
       if (unlink(filename) != 0 && errno != ENOENT) {
          berrno be;
-         Mmsg2(err, "Unable to delete %s. ERR=%s\n", filename, be.bstrerror());
-         Dmsg1(dbglvl, "%s", err);
-         Qmsg(dcr->jcr, M_INFO, 0, "%s", err);
+         Mmsg3(err, "truncate_cloud_volume for %s: Unable to delete %s. ERR=%s\n", VolumeName, filename, be.bstrerror());
          rtn = false;
       } else {
-         Dmsg1(dbglvl, "Unlink file %s\n", filename);
+         Mmsg2(err, "truncate_cloud_volume for %s: Unlink file %s.\n", VolumeName, filename);
       }
    }
 
@@ -208,7 +207,7 @@ void file_driver::make_cloud_filename(POOLMEM *&filename,
    Enter(dbglvl);
 
    pm_strcpy(filename, hostName);
-   dev->add_vol_and_part(filename, VolumeName, "part", part);
+   cloud_driver::add_vol_and_part(filename, VolumeName, "part", part);
    Dmsg1(dbglvl, "make_cloud_filename: %s\n", filename);
 }
 
@@ -254,17 +253,14 @@ bool file_driver::copy_cloud_part_to_cache(transfer *xfer)
    uint32_t upload_opt;
 */
 
-bool file_driver::init(JCR *jcr, cloud_dev *adev, DEVRES *adevice)
+bool file_driver::init(CLOUD *cloud, POOLMEM *&err)
 {
-   dev = adev;            /* copy cloud device pointer */
-   device = adevice;      /* copy device resource pointer */
-   cloud = device->cloud; /* local pointer to cloud definition */
-
-   /* File I/O buffer */
-   buf_len = dev->max_block_size;
-   if (buf_len == 0) {
-      buf_len = DEFAULT_BLOCK_SIZE;
+   if (cloud->host_name == NULL) {
+      Mmsg1(err, "Failed to initialize File Cloud. ERR=Hostname not set in cloud resource %s\n", cloud->hdr.name);
+      return false;
    }
+   /* File I/O buffer */
+   buf_len = DEFAULT_BLOCK_SIZE;
 
    hostName = cloud->host_name;
    bucketName = cloud->bucket_name;
@@ -276,27 +272,23 @@ bool file_driver::init(JCR *jcr, cloud_dev *adev, DEVRES *adevice)
    return true;
 }
 
-bool file_driver::start_of_job(DCR *dcr)
+bool file_driver::start_of_job(POOLMEM *&msg)
 {
-   Jmsg(dcr->jcr, M_INFO, 0, _("Using File cloud driver Host=%s Bucket=%s\n"),
-      hostName, bucketName);
+   Mmsg(msg, _("Using File cloud driver Host=%s Bucket=%s\n"), hostName, bucketName);
    return true;
 }
 
-bool file_driver::end_of_job(DCR *dcr)
-{
-   return true;
-}
-
-/*
- * Note, dcr may be NULL
- */
-bool file_driver::term(DCR *dcr)
+bool file_driver::end_of_job(POOLMEM *&msg)
 {
    return true;
 }
 
-bool file_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, ilist *parts, POOLMEM *&err)
+bool file_driver::term(POOLMEM *&msg)
+{
+   return true;
+}
+
+bool file_driver::get_cloud_volume_parts_list(const char* VolumeName, ilist *parts, cancel_callback *cancel_cb, POOLMEM *&err)
 {
    Enter(dbglvl);
 
@@ -343,7 +335,7 @@ bool file_driver::get_cloud_volume_parts_list(DCR *dcr, const char* VolumeName, 
    entry = (struct dirent *)malloc(sizeof(struct dirent) + name_max + 1000);
 
    for ( ;; ) {
-      if (dcr->jcr->is_canceled()) {
+      if (cancel_cb && cancel_cb->fct && cancel_cb->fct(cancel_cb->arg)) {
          pm_strcpy(err, "Job canceled");
          goto get_out;
       }
@@ -413,7 +405,7 @@ get_out:
    return ok;
 }
 
-bool file_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err)
+bool file_driver::get_cloud_volumes_list(alist *volumes, cancel_callback *cancel_cb, POOLMEM *&err)
 {
    if (!volumes) {
       pm_strcpy(err, "Invalid argument");
@@ -450,7 +442,7 @@ bool file_driver::get_cloud_volumes_list(DCR *dcr, alist *volumes, POOLMEM *&err
    entry = (struct dirent *)malloc(sizeof(struct dirent) + name_max + 1000);
 
    for ( ;; ) {
-      if (dcr->jcr->is_canceled()) {
+      if (cancel_cb && cancel_cb->fct && cancel_cb->fct(cancel_cb->arg)) {
          goto get_out;
       }
       errno = 0;
