@@ -73,18 +73,16 @@ start_test()
           $bperl -e "add_attribute('$conf/bacula-sd.conf', 'UriStyle', '$CLOUD_URISTYLE', 'Cloud')"
       fi
       if [ "$CLOUD_DRIVER" ]; then
-          driver=`echo $CLOUD_DRIVER | tr 'A-Z' 'a-z'`
-          # FakeS3 is useful but keeps big parts in memory. So we must limit parts.
-          if [ "$driver" = "fakes3" ]; then
-             if [ "$CLOUD_MAXIMUM_PART_SIZE" = "" ]; then
-                CLOUD_MAXIMUM_PART_SIZE=50MB
-             fi
-             CLOUD_DRIVER=S3
-          fi
-          $bperl -e "add_attribute('$conf/bacula-sd.conf', 'Driver', '\"$CLOUD_DRIVER\"', 'Cloud')"
+            $bperl -e "add_attribute('$conf/bacula-sd.conf', 'Driver', '\"$CLOUD_DRIVER\"', 'Cloud')"
       fi
       if [ "$CLOUD_MAXIMUM_PART_SIZE" ]; then
-          $bperl -e "add_attribute('$conf/bacula-sd.conf', 'MaximumPartSize', '$CLOUD_MAXIMUM_PART_SIZE', 'Device')"
+            $bperl -e "add_attribute('$conf/bacula-sd.conf', 'MaximumPartSize', '$CLOUD_MAXIMUM_PART_SIZE', 'Device')"
+      fi
+      if [ "$CLOUD_TRUNCATE_CACHE" ]; then
+            $bperl -e "add_attribute('$conf/bacula-sd.conf', 'TruncateCache', '$CLOUD_TRUNCATE_CACHE', 'Cloud')"
+      fi
+      if [ "$CLOUD_DRIVER_COMMAND" ]; then
+            $bperl -e "add_attribute('$conf/bacula-sd.conf', 'DriverCommand', '$CLOUD_DRIVER_COMMAND', 'Cloud')"
       fi
 
       variant_name="Cloud"
