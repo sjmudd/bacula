@@ -558,10 +558,10 @@ bool cloud_dev::get_cache_sizes(DCR *dcr, const char *VolumeName)
       /* Get size of part */
       Mmsg(fname, "%s/%s", vol_dir, dname.c_str());
       if (lstat(fname, &statbuf) == -1) {
-         berrno be;
-         Mmsg2(errmsg, "Failed to stat file %s: %s\n", fname, be.bstrerror());
-         Dmsg1(dbglvl, "%s\n", errmsg);
-         goto get_out;
+         /* The part is no longer here, might be a truncate in an other thread, just
+          * do like if the file wasn't here
+          */
+         continue;
       }
 
       cpart = (int)str_to_int64((char *)&(dname.c_str()[5]));
@@ -1051,8 +1051,10 @@ bool cloud_dev::open_device(DCR *dcr, int omode)
 
    /* TODO: Merge this part of the code with the previous section */
    cld_size = cloud_prox->get_size(getVolCatName(), part);
-   if (dcr->is_reading() && part > 1 && cache_sizes[part] == 0
-      && cld_size != 0) {
+   if (dcr->is_reading()
+      && part > 1
+      && (part > max_cache_part || cache_sizes[part] == 0)) /* Out of the existing parts or size == 0 */
+   {
       if (!wait_one_transfer(dcr, getVolCatName(), part)) {
          return false;
       }
@@ -1102,9 +1104,17 @@ bool cloud_dev::open_device(DCR *dcr, int omode)
          }
       }
 
-      /* Refresh the device id */
+      /* Refresh the device id and the current file size */
       if (fstat(m_fd, &sp) == 0) {
          devno = sp.st_dev;
+         part_size = sp.st_size;
+
+      } else {
+          /* Should never happen */
+         berrno be;
+         Mmsg1(errmsg, _("Could not use fstat on file descriptor. ERR=%s\n") ,be.bstrerror());
+         d_close(m_fd);
+         m_fd = -1;
       }
    } else if (dcr->jcr) {
       pm_strcpy(dcr->jcr->errmsg, errmsg);
@@ -1554,15 +1564,17 @@ bool cloud_dev::open_next_part(DCR *dcr)
    int save_part;
    char ed1[50];
 
+   Dmsg4(dbglvl, "open next: part=%d part_size=%d, can_append()=%s, openmode=%d\n", part, part_size, can_append() ? "true":"false", openmode);
    /* When appending, do not open a new part if the current is empty */
    if (can_append() && (part_size == 0)) {
-      Dmsg2(dbglvl, "open next: part=%d num_cache_parts=%d\n", part, num_cache_parts);
+      Dmsg2(dbglvl, "open next: part=%d num_cache_parts=%d exit OK no new part needed.\n", part, num_cache_parts);
       Leave(dbglvl);
       return true;
    }
 
    /* TODO: Get the the last max_part */
    uint32_t max_cloud_part = cloud_prox->last_index(getVolCatName());
+   Dmsg2(dbglvl, "open next: part=%d max_cloud_part=%d\n", part, max_cloud_part);
    if (!can_append() && part >= MAX(max_cache_part, max_cloud_part)) {
       Dmsg3(dbglvl, "EOT: part=%d num_cache_parts=%d max_cloud_part=%d\n", part, num_cache_parts, max_cloud_part);
       Mmsg2(errmsg, "part=%d no more parts to read. addr=%s\n", part,
@@ -2012,7 +2024,7 @@ bool cloud_dev::end_of_job(DCR *dcr, uint32_t truncate)
          Jmsg(dcr->jcr, (tpkt->m_state == TRANS_STATE_ERROR) ? M_ERROR : M_INFO, 0, "%s%s", prefix, umsg.c_str());
          Dmsg1(dbglvl, "%s", umsg.c_str());
          bool do_truncate = (truncate==TRUNC_AT_ENDOFJOB) || (truncate==TRUNC_CONF_DEFAULT && trunc_opt==TRUNC_AT_ENDOFJOB);
-         if (tpkt->m_state == TRANS_STATE_ERROR) {
+         if (tpkt->m_state != TRANS_STATE_DONE) {
             Mmsg(dcr->jcr->StatusErrMsg, _("Upload to Cloud failed"));
          } else if (do_truncate && tpkt->m_part!=1) {
             /* else -> don't remove the cache file if the upload failed */
@@ -2226,12 +2238,10 @@ bool cloud_dev::get_cache_volume_parts_list(DCR *dcr, const char* VolumeName, il
 
       /* Get size of part */
       if (lstat(part_path, &statbuf) == -1) {
-         berrno be;
-         Dmsg2(dbglvl, "Failed to stat file %s: %s\n",
-            part_path, be.bstrerror());
-         free_pool_memory(part_path);
-         free(part);
-         goto get_out;
+         /* The part is no longer here, might be a truncate in an other thread, just
+         * do like if the file wasn't here
+         */
+         continue;
       }
       free_pool_memory(part_path);
 
