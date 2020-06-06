@@ -1689,7 +1689,8 @@ bool cloud_dev::is_eod_valid(DCR *dcr)
 {
    JCR *jcr = dcr->jcr;
    ilist cache_parts;
-   bool do_update=false, ok=true;
+   bool do_update = false;
+   bool ok = true;
    POOL_MEM err, tmp;
 
    /* We need up to date information for Cloud and Cache */
@@ -1718,7 +1719,7 @@ bool cloud_dev::is_eod_valid(DCR *dcr)
    if (max_cloud_part == max_cache_part) {
       if (last_cache_size > 0 && last_cloud_size != last_cache_size) {
          ok = false;            /* Big consistency problem, which one do we take? Biggest one? */
-         Mmsg(tmp, "The last Part %ld size do not match between the Cache and the Cloud! Cache=%lld Cloud=%lld.\n",
+         Mmsg(tmp, "For the last Part=%ld the Cache and Cloud sizes are not the same! Cache=%lld Cloud=%lld.\n",
               max_cloud_part, last_cloud_size, last_cache_size);
          pm_strcat(err, tmp.c_str());
       }
@@ -1726,7 +1727,7 @@ bool cloud_dev::is_eod_valid(DCR *dcr)
 
    /* The catalog should have the right LastPart */
    if (VolCatInfo.VolCatParts != last_p) {
-      Mmsg(tmp, "The Parts do not match! Metadata Volume=%ld Catalog=%ld.\n",
+      Mmsg(tmp, "The number of parts do not match! Volume=%ld Catalog=%ld.\n",
            last_p, VolCatInfo.VolCatParts);
       VolCatInfo.VolCatParts = last_p;
       VolCatInfo.VolLastPartBytes = last_s;
@@ -1736,7 +1737,7 @@ bool cloud_dev::is_eod_valid(DCR *dcr)
 
    /* The catalog should have the right LastPartBytes */
    } else if (VolCatInfo.VolLastPartBytes != last_s) {
-      Mmsg(tmp, "The Last Part Bytes %ld do not match! Metadata Volume=%lld Catalog=%lld.\n",
+      Mmsg(tmp, "Sizes of last part number=%ld do not match! Volume=%lld Catalog=%lld.\n",
            last_p, VolCatInfo.VolLastPartBytes, last_s);
       VolCatInfo.VolLastPartBytes = last_s;
       VolCatInfo.VolCatBytes = last_s;
@@ -1745,14 +1746,15 @@ bool cloud_dev::is_eod_valid(DCR *dcr)
    }
    /* We also check that the last part uploaded in the cloud is correct */
    if (VolCatInfo.VolCatCloudParts != max_cloud_part) {
-      Mmsg(tmp, "The Cloud Parts do not match! Metadata Volume=%ld Catalog=%ld.\n",
+      Mmsg(tmp, "Number of Cloud Parts do not match! Volume=%ld Catalog=%ld.\n",
            max_cloud_part, VolCatInfo.VolCatCloudParts);
+      VolCatInfo.VolCatCloudParts = max_cloud_part;
       pm_strcat(err, tmp.c_str());
       do_update = true;
    }
    if (ok) {
       if (do_update) {
-         Jmsg2(jcr, M_WARNING, 0, _("For Volume \"%s\":\n%s\nCorrecting Catalog\n"), dcr->VolumeName, err.c_str());
+         Jmsg2(jcr, M_INFO, 0, _("Correcting catalog for Volume \"%s\":\n%s\n"), dcr->VolumeName, err.c_str());
          if (!dir_update_volume_info(dcr, false, true)) {
             Jmsg(jcr, M_WARNING, 0, _("Error updating Catalog\n"));
             dcr->mark_volume_in_error();
