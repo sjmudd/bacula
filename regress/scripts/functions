@@ -386,7 +386,7 @@ stop_bacula()
          exit 1
       fi
    fi
-   if [ "$FORCE_CLOUD" = yes ]; then
+   if [ "x$FORCE_CLOUD" = xyes ]; then
       $bperl -e 'check_parts()'
       if [ $? -ne 0 ]; then
          estat=1
