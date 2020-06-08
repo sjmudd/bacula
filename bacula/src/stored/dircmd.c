@@ -624,6 +624,7 @@ static bool do_label(JCR *jcr, int relabel)
             dev->Unlock();
             goto bail_out;
          }
+         /* ***FIXME*** truncate_option not implemented yet */
 
          /* some command use recv and don't accept catalog update.
           * it's not the case here, so we force dir_update_volume_info catalog update */
@@ -907,7 +908,7 @@ static bool upload_cmd(JCR *jcr)
                ok = dev->upload_cache(dcr, volname, err);
                dev->part = 0;
                dev->close(dcr);
-               dev->end_of_job(dcr);
+               dev->end_of_job(dcr, TRUNC_CONF_DEFAULT);
             }
          } else if (dev->is_busy() || dev->is_blocked()) {
             send_dir_busy_message(dir, dev);
@@ -919,7 +920,7 @@ static bool upload_cmd(JCR *jcr)
                ok = dev->upload_cache(dcr, volname, err);
                dev->part = 0;
                dev->close(dcr);
-               dev->end_of_job(dcr);
+               dev->end_of_job(dcr, TRUNC_CONF_DEFAULT);
             }
          }
          dev->max_concurrent_jobs = max_jobs;
@@ -1088,7 +1089,7 @@ bail_out:
       dev->close(dcr);
    }
 
-   dev->end_of_job(dcr);
+   dev->end_of_job(dcr, TRUNC_CONF_DEFAULT);
 
    if (!dev->is_open()) {
       dev->clear_volhdr();

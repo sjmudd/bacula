@@ -574,7 +574,7 @@ public:
    virtual bool weof(DCR *dcr, int num);        /* in dev.c */
    virtual bool end_of_volume(DCR *dcr) { return true; };
    virtual bool start_of_job(DCR *dcr) {return true; };
-   virtual bool end_of_job(DCR *dcr) {return true; };
+   virtual bool end_of_job(DCR *dcr, uint32_t truncate) {Enter(50); return true; };
    virtual bool is_indexed() { return true; };
    virtual void set_ateof();                    /* in dev.c */
    virtual const char *print_type() = 0;        /* in dev.c */
