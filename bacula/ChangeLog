@@ -1,5 +1,103 @@
-              Changelog for version 9.6.3
+              Changelog for version 9.6.4
 
+
+Release 9.6.4
+
+08Jun20
+ - Add configure variables to baculabackupreport. Patch from bug #2538
+ - Fix orphaned buffers in cloud by adding truncate argument to end_of_job()
+
+06Jun20
+ - Improve clarity of Cloud part mismatches and make it an INFO message rather 
+  than a WARNING since it corrects the catalog.
+ - Small trivial change to check_parts
+
+05Jun20
+ - Backport more Enterprise cloud parts changes
+ - Backport cloud upload code from Enterprise
+
+03Jun20
+ - Update s3_driver.c to new libs3 API calling sequence
+
+02Jun20
+ - Fix tray-monitor installation
+ - Recompile ./configure
+ - Add ./configure code to check for and enable/disable S3 support
+ - win32: Fix org#2547 About possible NULL pointer dereference in get_memory_info
+ - Ensure cloud driver loaded when listing cloud volumes
+
+29May20
+ - baculum: Request #2546 support for full restore when file records for backup 
+  job are pruned
+
+25May20
+ - baculum: Fix problem with authorization error after upgrade
+ - baculum: Add UPGRADE file
+
+24May20
+ - baculum: Fix returning value in TStyleDiff - generated notice with PHP 
+  7.4
+ - baculum: Remove execute bit for framework scripts
+
+22May20
+ - baculum: Fix displaying empty column button in table column visibility menu - 
+  reported by Wanderlei Huttel
+
+21May20
+ - baculum: Update Polish translations
+ - baculum: Update Portuguese translations
+
+19May20
+ - baculum: New user management. LDAP support. Role-based access control.
+
+12May20
+ - Fix new compiler warnings + always use bstrncpy not strncpy to ensure EOS at 
+  end of string
+
+11May20
+ - Return smartalloc buffers zeroed -- future performance improvement
+
+10May20
+ - Improve scanning data/time, fixes bug #2472
+ - Make ABORT mention segfault to clarify non-bug #2528
+ - Make reading a short block a warning rather than error
+
+09May20
+ - baculum: Fix validators in run job modal window
+
+02May20
+ - Remove unused -t option in dbcheck.c -- fixes bug #2453
+
+01May20
+ - Fix bug 2523 -- spurious extra linking
+ - Fix bug #2534 possible double free in error case
+ - Fix possible sscanf overflows
+ - Fix overflow from malicious FD reported by Pasi Saarinen
+
+18Apr20
+ - baculum: Add option to show time in job log - idea proposed by Wanderlei 
+  Huttel
+ - baculum: Add show log time parameter to job log endpoint
+
+16Apr20
+ - baculum: Add tip about using table row selection
+
+17Mar20
+ - Fix bug #2525 seg fault when doing estimate with accurate and MD5
+ - baculum: Fix issues with SELinux support reported by Neil MacGregor
+
+16Mar20
+ - Correct some copyrights
+
+07Mar20
+ - Add Docker plugin rpm spec files
+
+Bugs fixed/closed since last release:
+2453 2472 2525 2528 2534 2546 2547
+
+===========================================================
+
+Release Version 9.6.3
 09Mar20
  - Eliminate false error when droping postgres table MAC
  - Apply Carsten's character set fix for the docs. Many thanks!

@@ -1,5 +1,85 @@
 
-               Release Notes for Bacula 9.6.3
+               Release Notes for Bacula 9.6.4
+
+This is a major security and bug fix release. We suggest everyone
+to upgrade as soon as possible.
+
+One significant improvement is for the AWS S3 cloud driver. First the
+code base has been brought much closer to the Enterprise version (still
+a long ways to go). Second is that the community code now uses the latest
+version of libs3 as maintained by Bacula Systems.  The libs3 code is
+available as a tar file for Bacula version 9.6.4 at: 
+
+   www.bacula.org/downloads/libs3-20200523.tar.gz
+
+Note: Version 9.6.4 must be compiled with the above libs3 version or later.
+To build libs3:
+- Remove any libs3 package loaded by your OS
+- Download above link
+- tar xvfz libs3-20200523.tar.gz
+- cd libs3-20200523
+- make  # should have no errors
+- sudo make install
+
+Then when you do your Bacula ./configure <args> it should automatically
+detect and use the libs3. The output from the ./configure will show
+whether or not libs3 was found during the configuration. E.g.
+   S3 support:                yes
+in the output from ./configure.
+
+08Jun20
+ - Add configure variables to baculabackupreport. Patch from bug #2538
+ - Fix orphaned buffers in cloud by adding truncate argument to end_of_job()
+ - Improve clarity of Cloud part mismatches and make it an INFO message rather 
+   than a WARNING since it corrects the catalog.
+ - Small trivial change to check_parts
+ - Backport more Enterprise cloud parts changes
+ - Backport cloud upload code from Enterprise
+ - Update s3_driver.c to new libs3 API calling sequence
+ - Fix tray-monitor installation
+ - Recompile ./configure
+ - Add ./configure code to check for and enable/disable S3 support
+ - win32: Fix org#2547 About possible NULL pointer dereference in get_memory_info
+ - Ensure cloud driver loaded when listing cloud volumes
+ - baculum: Request #2546 support for full restore when file records for backup 
+   job are pruned
+ - baculum: Fix problem with authorization error after upgrade
+ - baculum: Add UPGRADE file
+ - baculum: Fix returning value in TStyleDiff - generated notice with PHP 
+   7.4
+ - baculum: Remove execute bit for framework scripts
+ - baculum: Fix displaying empty column button in table column visibility menu - 
+  reported by Wanderlei Huttel
+ - baculum: Update Polish translations
+ - baculum: Update Portuguese translations
+ - baculum: New user management. LDAP support. Role-based access control.
+ - Fix new compiler warnings + always use bstrncpy not strncpy to ensure EOS at 
+   end of string
+ - Return smartalloc buffers zeroed -- future performance improvement
+ - Improve scanning data/time, fixes bug #2472
+ - Make ABORT mention segfault to clarify non-bug #2528
+ - Make reading a short block a warning rather than error
+ - baculum: Fix validators in run job modal window
+ - Remove unused -t option in dbcheck.c -- fixes bug #2453
+ - Fix bug 2523 -- spurious extra linking
+ - Fix bug #2534 possible double free in error case
+ - Fix possible sscanf overflows
+ - Fix overflow from malicious FD reported by Pasi Saarinen
+ - baculum: Add option to show time in job log - idea proposed by Wanderlei 
+   Huttel
+ - baculum: Add show log time parameter to job log endpoint
+ - baculum: Add tip about using table row selection
+ - Fix bug #2525 seg fault when doing estimate with accurate and MD5
+ - baculum: Fix issues with SELinux support reported by Neil MacGregor
+ - Correct some copyrights
+ - Add Docker plugin rpm spec files
+
+Bugs fixed/closed since last release:
+2453 2472 2525 2528 2534 2538 2546 2547
+
+===================================================================
+
+Release 9.6.3
 
 This is a minor bug fix (mostly fixing incorrect copyrights) to Release-9.6.2.
 
