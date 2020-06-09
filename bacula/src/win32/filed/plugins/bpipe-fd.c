@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -448,7 +448,7 @@ static bRC createFile(bpContext *ctx, struct restore_pkt *rp)
       printf("Restore where directory name too long. Restricting to first %d bytes.\n",
          (int)sizeof(plugin_ctx::where)-1);
    }
-   strncpy(((struct plugin_ctx *)ctx->pContext)->where, rp->where,
+   bstrncpy(((struct plugin_ctx *)ctx->pContext)->where, rp->where,
       sizeof(plugin_ctx::where));
    ((struct plugin_ctx *)ctx->pContext)->replace = rp->replace;
    rp->create_status = CF_EXTRACT;
