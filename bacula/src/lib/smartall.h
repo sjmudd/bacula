@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2017 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -30,13 +30,12 @@ extern uint64_t DLL_IMP_EXP sm_bytes;
 extern uint32_t DLL_IMP_EXP sm_max_buffers;
 extern uint32_t DLL_IMP_EXP sm_buffers;
 
+/* Avoid aggressive GCC optimization */
+extern void *bmemset(void *s, int c, size_t n);
+
 #ifdef  SMARTALLOC
 #undef  SMARTALLOC
 #define SMARTALLOC SMARTALLOC
-
-
-/* Avoid aggressive GCC optimization */
-extern void *bmemset(void *s, int c, size_t n);
 
 extern void *sm_malloc(const char *fname, int lineno, unsigned int nbytes),
             *sm_calloc(const char *fname, int lineno,
@@ -84,7 +83,7 @@ inline void sm_dump(int x, int y=0) {} /* with default arguments, we can't use a
 #define sm_new_owner(a, b, c)
 #define sm_get_owner(a,b)
 #define sm_malloc(f, l, n)     malloc(n)
-#define sm_free(f, l, n)       free(n)
+#define sm_free(f, l, n)       free((void *)n)
 #define sm_check(f, l, fl)
 #define sm_check_rtn(f, l, fl) 1
 
