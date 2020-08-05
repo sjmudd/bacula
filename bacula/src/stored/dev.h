@@ -550,7 +550,7 @@ public:
    virtual bool get_cloud_volume_parts_list(DCR *dcr, const char *VolumeName, ilist *parts, POOLMEM *&err) { pm_strcpy(err, "Not implemented"); return false; };
    virtual uint32_t get_cloud_upload_transfer_status(POOL_MEM &msg, bool verbose) { pm_strcpy(msg, "Not implemented"); return 0; };
    virtual uint32_t get_cloud_download_transfer_status(POOL_MEM &msg, bool verbose) { pm_strcpy(msg, "Not implemented"); return 0; };
-   virtual bool upload_cache(DCR *dcr, const char *VolName, POOLMEM *&err) { return true; };
+   virtual bool upload_cache(DCR *dcr, const char *VolName, uint32_t truncate, POOLMEM *&err) { return true; };
    virtual bool open_device(DCR *dcr, int omode) = 0;
    virtual bool open_next_part(DCR *dcr);
    virtual bool close(DCR *dcr);                /* in dev.c */
