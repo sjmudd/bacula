@@ -362,6 +362,7 @@ void *bmalloc(size_t size)
   buf = sm_malloc(file, line, size);
 #else
   buf = malloc(size);
+  memset(buf, 0, size);  /* clear memory */
 #endif
   if (buf == NULL) {
      berrno be;
@@ -379,6 +380,7 @@ void *b_malloc(const char *file, int line, size_t size)
   buf = sm_malloc(file, line, size);
 #else
   buf = malloc(size);
+  memset(buf, 0, size);  /* clear memory */
 #endif
   if (buf == NULL) {
      berrno be;
