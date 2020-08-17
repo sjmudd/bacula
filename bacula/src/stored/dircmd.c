@@ -905,7 +905,7 @@ static bool upload_cmd(JCR *jcr)
             dev->setVolCatName(volname);
             dev->part = 0;
             if (dev->open_device(dcr, OPEN_READ_WRITE)) {
-               ok = dev->upload_cache(dcr, volname, err);
+               ok = dev->upload_cache(dcr, volname, 0, err);
                dev->part = 0;
                dev->close(dcr);
                dev->end_of_job(dcr, TRUNC_CONF_DEFAULT);
@@ -917,7 +917,7 @@ static bool upload_cmd(JCR *jcr)
             dev->setVolCatName(volname);
             dev->part = 0;
             if (dev->open_device(dcr, OPEN_READ_WRITE)) {
-               ok = dev->upload_cache(dcr, volname, err);
+               ok = dev->upload_cache(dcr, volname, 0, err);
                dev->part = 0;
                dev->close(dcr);
                dev->end_of_job(dcr, TRUNC_CONF_DEFAULT);
