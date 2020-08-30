@@ -1,7 +1,7 @@
 /*
    Bacula(R) - The Network Backup Solution
 
-   Copyright (C) 2000-2018 Kern Sibbald
+   Copyright (C) 2000-2020 Kern Sibbald
 
    The original author of Bacula is Kern Sibbald, with contributions
    from many others, a complete list can be found in the file AUTHORS.
@@ -294,7 +294,7 @@ private slots:
     void cb_about() {
        QMessageBox::about(this, "Bacula Tray Monitor", "Bacula Tray Monitor\n"
                           "For more information, see: www.bacula.org\n"
-                          "Copyright (C) 2000-2018, Kern Sibbald\n"
+                          "Copyright (C) 2000-2020, Kern Sibbald\n"
                           "License: AGPLv3");
     }
     RESMON *get_director() {

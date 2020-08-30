@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 # Author: Eric Bollengier, 2009
-# Copyright (C) 2000-2015 Kern Sibbald
+# Copyright (C) 2000-2020 Kern Sibbald
 # License: BSD 2-Clause; see file LICENSE-FOSS
 #
 # shell script to update SQLite from version 1.38 to 2.0
