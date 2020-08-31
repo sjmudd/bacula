@@ -10,13 +10,20 @@ this will be the last of the 9.6.x releases.  The next release major
 release (a really big one) is currently scheduled for December.  More 
 about this in a subsequent status report ...
 
-30Aug20
+
+
+18Sep20
+ - baculum: Fix displaying date and time on volume view page
+ - baculum: Fix #2564 changing volume status to Read-Only
+ - baculum: Fix saving multicombobox control values
+ - baculum: Fix multicombobox and multitextbox controls to work with PHP 7.4
+ - baculum: Fix #2562 displaying date and time in tables on Safari
  - Update copyright year
  - Clarify SD vbackup device error message
  - Fix MT2554 :update upload_cache call in dircmd.c
  - zero malloced memory when SMARTALLOC not enabled
  - baculum: Fix #2558 saving day or day range in schedule resource - reported by 
-  Jose Alberto
+   Jose Alberto
  - Fix MT2554 :upgrade upload_cache interface.
  - Eliminate compiler errors when smartalloc is turned off
  - baculum: Fix date formatter to work with PHP 7.4

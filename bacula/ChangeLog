@@ -1,6 +1,20 @@
               Changelog for version 9.6.6
 
 
+
+18Sep20
+ - baculum: Fix displaying date and time on volume view page
+
+17Sep20
+ - baculum: Fix #2564 changing volume status to Read-Only
+
+11Sep20
+ - baculum: Fix saving multicombobox control values
+ - baculum: Fix multicombobox and multitextbox controls to work with PHP 7.4
+
+10Sep20
+ - baculum: Fix #2562 displaying date and time in tables on Safari
+
 30Aug20
  - Update copyright year
 
