@@ -1,5 +1,47 @@
 
-               Release Notes for Bacula 9.6.4
+               Release Notes for Bacula 9.6.6
+
+Release 9.6.6
+
+20Sep20
+
+This is a minor bug fix release. Unless there is some new major bug found,
+this will be the last of the 9.6.x releases.  The next release major
+release (a really big one) is currently scheduled for December.  More 
+about this in a subsequent status report ...
+
+30Aug20
+ - Update copyright year
+ - Clarify SD vbackup device error message
+ - Fix MT2554 :update upload_cache call in dircmd.c
+ - zero malloced memory when SMARTALLOC not enabled
+ - baculum: Fix #2558 saving day or day range in schedule resource - reported by 
+  Jose Alberto
+ - Fix MT2554 :upgrade upload_cache interface.
+ - Eliminate compiler errors when smartalloc is turned off
+ - baculum: Fix date formatter to work with PHP 7.4
+ - baculum: Fix configure Bacula hosts page to work with PHP 7.4
+ - baculum: Update Portuguese translations
+ - baculum: Change colours in table headers and borders
+ - baculum: Add remove runscript button
+ - Fix #6366 About an issue with verify job level=DiskToCatalog
+ - baculum: Close modal windows on pressing ESC key
+ - baculum: Fix logout button on authorization failed page
+ - baculum: Add local user authentication method support
+ - baculum: Add date and time formatters - idea proposed by Wanderlei Huttel
+ - baculum: Enable re-running jobs in async way and visual improvements
+ - baculum: Change cursor over selectable table
+ - Fix build script copyright detection
+ - release: add code to detect Bacula Systems copyrights and fail release
+ - Fix compilation of bsnapshot on Fedora
+
+Bugs fixed/closed since last release:
+2558 6366
+
+
+===================================================================
+
+Release 9.6.4
 
 This is a major security and bug fix release. We suggest everyone
 to upgrade as soon as possible.
